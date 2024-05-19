@@ -4,6 +4,7 @@ from dash.dependencies import Input, Output, State
 import plotly.graph_objects as go
 import requests
 import json
+import seaborn as sns
 
 app = dash.Dash(__name__)
 
@@ -17,22 +18,31 @@ app.layout = html.Div([
         dcc.Input(id='gamepk-input', type='text', placeholder='Enter Game PK', style={'marginRight': '10px'}),
         dcc.Input(id='pitcher-name-input', type='text', placeholder='Enter Pitcher Name', style={'marginRight': '10px'}),
         html.Button('Fetch Strike Zone', id='fetch-button', n_clicks=0)
-    ], style={'text-align': 'center', 'padding': '10px'})
+    ], style={'text-align': 'center', 'padding': '10px'}),
+    dcc.Interval(
+        id='interval-component',
+        interval=15*1000,  # in milliseconds
+        n_intervals=0
+    )
 ])
 
-# Modify your callback function:
 @app.callback(
     Output('strike-zone-graph', 'figure'),
-    [Input('fetch-button', 'n_clicks')],
+    [Input('fetch-button', 'n_clicks'), Input('interval-component', 'n_intervals')],
     [State('gamepk-input', 'value'), State('pitcher-name-input', 'value')]
 )
-def update_strike_zone(n_clicks, game_pk, pitcher_name):
+def update_strike_zone(n_clicks, n_intervals, game_pk, pitcher_name):
     if n_clicks > 0 and game_pk:
         game_data = fetch_game_data(game_pk)
         if game_data and pitcher_name:
             strike_zone_data = fetch_strike_zone_data(game_data)
-            #pitch_locations = extract_pitch_locations_for_pitcher(game_data, pitcher_name)
-            pitch_locations = extract_pitch_data_for_pitcher(game_data, pitcher_name)
+            #pitch_locations = extract_pitch_data_for_pitcher(game_data, pitcher_name)
+            pitch_locations = extract_current_at_bat_pitch_locations(game_data)
+
+            # Create a color map
+            unique_pitch_types = set(location['pitch_type'] for location in pitch_locations)
+            colors = sns.color_palette('hsv', len(unique_pitch_types)).as_hex()
+            color_map = dict(zip(unique_pitch_types, colors))
 
             fig = go.Figure()
 
@@ -44,13 +54,22 @@ def update_strike_zone(n_clicks, game_pk, pitcher_name):
 
             # Plot each pitch location
             for location in pitch_locations:
+                marker_style = {
+                    'size': 25,
+                    'color': color_map[location['pitch_type']],
+                    'line': {'width': 2}
+                }
+                if location['call'] == 'In Play':
+                    marker_style['symbol'] = 'circle-open-dot'
+                    marker_style['line']['color'] = 'red'  # Outline color for "In Play" pitches
+                    
                 fig.add_trace(go.Scatter(
                     x=[location['px']],
                     y=[location['pz']],
                     mode='markers',
-                    marker=dict(color='red', size=10),
+                    marker=marker_style,
                     name='Pitch Location',
-                    hovertemplate=f"px: {location['px']}, pz: {location['pz']},<br>pitch_type: {location['pitch_type']},<br>result: {location['result']},<br>description: {location['description']},<br>call: {location['call']},<br>batter: {location['batter_name']}"
+                    hovertemplate=f"px: {location['px']}, pz: {location['pz']},<br>start_speed: {location['start_speed']},<br>result: {location['result']},<br>spin_rate: {location['spin_rate']},<br>call: {location['call']},<br>batter: {location['batter_name']},<br>pitch_name: {location['pitch_name']}"
                 ))
 
             # Set figure properties
@@ -67,7 +86,6 @@ def update_strike_zone(n_clicks, game_pk, pitcher_name):
             )
             return fig
     return go.Figure()  # Return an empty figure if no data
-
 
 def fetch_game_data(game_pk):
     """Fetches game data from Baseball Savant and exports pitcher data to JSON."""
@@ -121,6 +139,30 @@ def fetch_all_pitch_locations(game_data):
 
     return locations
 
+def extract_current_at_bat_pitch_locations(game_data):
+    locations = []
+    current_play = fetch_current_play_data(game_data)
+    if current_play:
+        play_events = current_play.get('playEvents', [])
+        for pitch in play_events:
+            pitch_data = pitch.get('pitchData', {})
+            if pitch_data:
+                coordinates = pitch_data.get('coordinates', {})
+                if coordinates:
+                    px = coordinates.get('pX')
+                    pz = coordinates.get('pZ')
+                    if px is not None and pz is not None:
+                        locations.append({
+                            'px': px,
+                            'pz': pz,
+                            'startSpeed': pitch_data.get('pitch_type'),
+                            'endSpeed': pitch_data.get('start_speed'),
+                            
+
+                        })
+    return locations
+    
+
 def extract_pitch_locations_for_pitcher(game_data, pitcher_name):
     """Extracts pitch locations for a specific pitcher by name."""
     locations = []
@@ -164,32 +206,38 @@ def extract_pitch_data_for_pitcher(game_data, pitcher_name):
                         
     return pitch_data
 
-def fetch_strike_zone_data(game_pk):
-    """Fetches game data from Baseball Savant and extracts strike zone details."""
-    url = f"https://baseballsavant.mlb.com/gf?game_pk={game_pk}"
-    response = requests.get(url)
-    if response.status_code == 200:
-        game_data = response.json()
-        # Navigate to the correct path to extract strike zone data
-        current_play = game_data.get('scoreboard', {}).get('currentPlay', {})
-        play_events = current_play.get('playEvents', [])
-        if play_events:
-            pitch_data = play_events[0].get('pitchData', {})  # Access the first event's pitch data
-            strike_zone_top = pitch_data.get('strikeZoneTop')
-            strike_zone_bottom = pitch_data.get('strikeZoneBottom')
-            
-            if strike_zone_top is not None and strike_zone_bottom is not None:
-                return {'top': strike_zone_top, 'bottom': strike_zone_bottom}
-            else:
-                print("Strike zone data not found in the first play event.")
+def fetch_strike_zone_data(game_data):
+    """Extracts strike zone details from game data."""
+    # Fetch current play data
+    print("Fetching strike zone data...")
+    current_play = fetch_current_play_data(game_data)
+    play_events = current_play.get('playEvents', [])
+    if play_events:
+        pitch_data = play_events[0].get('pitchData', {})  # Access the first event's pitch data
+        strike_zone_top = pitch_data.get('strikeZoneTop')
+        strike_zone_bottom = pitch_data.get('strikeZoneBottom')
+        print(f"Strike zone data found: top={strike_zone_top}, bottom={strike_zone_bottom}")
+        
+        if strike_zone_top is not None and strike_zone_bottom is not None:
+            return {'top': strike_zone_top, 'bottom': strike_zone_bottom}
         else:
-            print("No play events found for the current play.")
+            print("Strike zone data not found in the first play event.")
     else:
-        print("Failed to fetch data:", response.status_code)
+        print("No play events found for the current play.")
     
-    # Return default values if the necessary data is not found or the request fails
+    # Return default values if the necessary data is not found
     return {'top': 3.5, 'bottom': 1.5}
 
+def fetch_current_play_data(game_data):
+    """Extracts current play details from game data."""
+    # Navigate to the correct path to extract current play data
+    current_play = game_data.get('scoreboard', {}).get('currentPlay', {})
+    if current_play:
+        print(f"Current play data found: {current_play}")
+        return current_play
+    else:
+        print("No current play data found.")
+        return {}
 
 if __name__ == '__main__':
     app.run_server(debug=True)
