@@ -5,30 +5,99 @@ import plotly.graph_objects as go
 import requests
 import json
 import pandas as pd
-import seaborn as sns
+from pybaseball import batting_stats_bref
 
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
-
 app.layout = html.Div([
     html.H1("Baseball Pitch Data Visualization", style={'text-align': 'center'}),
     html.Div([
         dcc.Input(id='gamepk-input', type='text', placeholder='Enter Game PK', style={'marginRight': '10px'}),
         dcc.Input(id='pitcher-name-input', type='text', placeholder='Enter Pitcher Name', style={'marginRight': '10px'}),
         html.Button('Fetch Data', id='fetch-button', n_clicks=0),
-        dcc.Interval(id='interval-component', interval=30*1000, n_intervals=0)
+        dcc.Interval(id='interval-component', interval=20*1000, n_intervals=0)
     ], style={'text-align': 'center', 'padding': '10px'}),
     html.Div([
         html.Div([
             dcc.Graph(id='strike-zone-graph', style={'height': '50vh', 'width': '100%', 'margin': '0', 'padding': '0'})
-        ], style={'display': 'inline-block', 'width': '50%', 'padding': '0', 'margin': '0'}),
+        ], style={'display': 'inline-block', 'width': '33.33%', 'padding': '0', 'margin': '0'}),
         html.Div([
             dcc.Graph(id='current-zone-graph', style={'height': '50vh', 'width': '100%', 'margin': '0', 'padding': '0'})
-        ], style={'display': 'inline-block', 'width': '50%', 'padding': '0', 'margin': '0'})
+        ], style={'display': 'inline-block', 'width': '33.33%', 'padding': '0', 'margin': '0'}),
+        html.Div([
+            dcc.Graph(id='win-probability-graph', style={'height': '50vh', 'width': '100%', 'margin': '0', 'padding': '0'})
+        ], style={'display': 'inline-block', 'width': '33.33%', 'padding': '0', 'margin': '0'})
     ], style={'width': '100%', 'padding': '0', 'margin': '0'}),
     html.Div([
         dcc.Graph(id='live-pitch-data-graph', style={'height': '50vh', 'width': '100%', 'margin': '0'})
+    ]),
+    html.Div([
+        dcc.Checklist(
+            id='toggle-labels',
+            options=[
+                {'label': 'Show Labels', 'value': 'show'}
+            ],
+            value=[],
+            style={'display': 'inline-block'}
+        )
     ])
 ])
+color_dict = {
+                    'Changeup': 'red',
+                    'Curveball': 'blue',
+                    'Cutter': 'green',
+                    'Eephus': 'yellow',
+                    'Forkball': 'purple',
+                    'Four-Seam Fastball': 'orange',
+                    '4-Seam Fastball': 'orange',
+                    'Knuckleball': 'pink',
+                    'Knuckle Curve': 'cyan',
+                    'Screwball': 'magenta',
+                    'Sinker': 'brown',
+                    'Slider': 'lime',
+                    'Slurve': 'teal',
+                    'Splitter': 'navy',
+                    'Sweeper': 'maroon'
+                }
+stats = batting_stats_bref(2024)
+
+
+
+@app.callback(
+    Output('win-probability-graph', 'figure'),
+    [Input('fetch-button', 'n_clicks'), Input('interval-component', 'n_intervals')],
+    [State('gamepk-input', 'value')]
+)
+def update_win_probability_graph(n_clicks, n_intervals, game_pk):
+    if n_clicks > 0 and game_pk:
+        game_data = fetch_game_data(game_pk)
+        previous_result = extract_current_result(game_data)
+        if game_data:
+            home_win_prob, away_win_prob,home_team,away_team = extract_win_probabilities(game_data)
+
+            if home_win_prob is not None and away_win_prob is not None:
+                fig = go.Figure()
+
+                fig.add_trace(go.Bar(
+                    x=[home_team, away_team],
+                    y=[home_win_prob, away_win_prob],
+                    name='Win Probability',
+                    marker_color=['blue', 'red']
+                ))
+
+                # Check if previous_result is None
+                if previous_result is None:
+                    previous_result = 'No current at bat'
+
+                fig.update_layout(
+                    title=home_team+" vs "+away_team+ " Win Probability<br>Previous Result: "+previous_result,
+                    yaxis_title="Win Probability",
+                    xaxis_title="Team",
+                    showlegend=False
+                )
+
+                return fig
+
+    return go.Figure()  # Return an empty figure if no data
 
 @app.callback(
     Output('strike-zone-graph', 'figure'),
@@ -41,11 +110,6 @@ def update_strike_zone(n_clicks, n_intervals, game_pk, pitcher_name):
         if game_data and pitcher_name:
             strike_zone_data = fetch_strike_zone_data(game_data)
             pitch_locations = extract_pitch_data_for_pitcher(game_data, pitcher_name)
-
-            # Create a color map
-            unique_pitch_types = set(location['pitch_type'] for location in pitch_locations)
-            colors = sns.color_palette('hsv', len(unique_pitch_types)).as_hex()
-            color_map = dict(zip(unique_pitch_types, colors))
 
             fig = go.Figure()
 
@@ -60,8 +124,8 @@ def update_strike_zone(n_clicks, n_intervals, game_pk, pitcher_name):
                 fig.add_trace(go.Scatter(
                     x=[location['px']],
                     y=[location['pz']],
-                    mode='markers',
-                    marker=dict(color=color_map[location['pitch_type']], size=15),
+                    mode='markers+text',
+                    marker=dict(color=color_dict.get(location['pitch_name'], '#000'), size=15),  # Use the color from the dictionary
                     name='Pitch Location',
                     hovertemplate=f"px: {location['px']}, pz: {location['pz']},<br>start_speed: {location['start_speed']},<br>result: {location['result']},<br>spin_rate: {location['spin_rate']},<br>call: {location['call']},<br>batter: {location['batter_name']},<br>pitch_name: {location['pitch_name']}"
                 ))
@@ -73,13 +137,30 @@ def update_strike_zone(n_clicks, n_intervals, game_pk, pitcher_name):
                 yaxis_title="Height (feet)",
                 showlegend=False,
                 xaxis=dict(scaleanchor="y", scaleratio=1),
-                yaxis=dict(
-                    range=[0, 5]
-                ),
+                yaxis=dict(range=[0, 5]),
                 xaxis_range=[-2.5, 2.5]
             )
             return fig
     return go.Figure()  # Return an empty figure if no data
+
+def extract_win_probabilities(game_data):
+    try:
+        home_win_prob = game_data['scoreboard']['stats']['wpa']['gameWpa'][-1]['homeTeamWinProbability']
+        away_win_prob = game_data['scoreboard']['stats']['wpa']['gameWpa'][-1]['awayTeamWinProbability']
+        home_team = game_data['home_team_data']['name']
+        away_team = game_data['away_team_data']['name']
+        return home_win_prob, away_win_prob, home_team, away_team
+    except KeyError:
+        return None, None, None, None
+
+def extract_current_result(game_data):
+    try:
+        play_events = game_data['scoreboard']['currentPlay']['playEvents']
+        if play_events:  # Check if the list is not empty
+            description = play_events[-1]['details']['description']
+            return description
+    except KeyError:
+        return 'No current play ongoing.'
 
 @app.callback(
     Output('current-zone-graph', 'figure'),
@@ -95,6 +176,7 @@ def update_current_zone(n_clicks, n_intervals, game_pk, pitcher_name):
 
             # Extract batter's full name
             batter_name = current_play_data.get('matchup', {}).get('batter', {}).get('fullName', 'Unknown')
+            pitcher_name = current_play_data.get('matchup', {}).get('pitcher', {}).get('fullName', 'Unknown')
 
             # Check if playEvents is a list
             if isinstance(current_play_data.get('playEvents'), list):
@@ -110,22 +192,30 @@ def update_current_zone(n_clicks, n_intervals, game_pk, pitcher_name):
                 for play_event in current_play_data['playEvents']:
                     pitch_data = play_event.get('pitchData', {})
                     coordinates = pitch_data.get('coordinates', {})
+                    pitch_type = play_event.get('details', {}).get('type', {}).get('description', 'Unknown')
+                    pitch_speed = play_event.get('pitchData', {}).get('startSpeed', 'Unknown')
+                    spin_rate = pitch_data.get('breaks', {}).get('spinRate', 'Unknown')
+                    count = play_event.get('count', {}).get('balls', 0), play_event.get('count', {}).get('strikes', 0)
+                    call = play_event.get('details', {}).get('call', {}).get('description', 'Unknown')
+
                     px = coordinates.get('pX')
                     pz = coordinates.get('pZ')
 
-                    # Plot the pitch location
+                    
+                    color = color_dict.get(pitch_type, 'black')  # Use black for unknown pitch types
+
                     fig.add_trace(go.Scatter(
-                        x=[px],
-                        y=[pz],
-                        mode='markers',
-                        marker=dict(color='red', size=15),
-                        name='Pitch Location',
-                        hovertemplate=f"px: {px}, pz: {pz}"
-                    ))
+        x=[px],
+        y=[pz],
+        mode='markers',
+        marker=dict(color=color, size=15),
+        name=pitch_type,
+        hovertemplate=f"type: {pitch_type},<br>speed: {pitch_speed} mph,<br>spin rate: {spin_rate},<br>count: {count},<br>call: {call},<br>batter: {batter_name}"
+    ))
 
                 # Set figure properties
                 fig.update_layout(
-                    title=f"Strike Zone with Current Pitch Location for {batter_name}",  # Update the title with the batter's name
+                    title=f"Strike Zone with Current Pitch Location for {pitcher_name},<br>{get_player_slashline(batter_name)}",  # Update the title with the batter's name
                     xaxis_title="Width (feet)",
                     yaxis_title="Height (feet)",
                     showlegend=False,
@@ -137,6 +227,18 @@ def update_current_zone(n_clicks, n_intervals, game_pk, pitcher_name):
                 )
                 return fig
     return go.Figure()  # Return an empty figure if no data
+
+def get_player_slashline(batter_name):
+
+    player_stats = stats[stats['Name'] == batter_name]
+
+    # Get the player's slash line
+    avg = player_stats['BA'].values[0]
+    obp = player_stats['OBP'].values[0]
+    slg = player_stats['SLG'].values[0]
+    ops = player_stats['OPS'].values[0]
+
+    return f"{batter_name}: AVG:{avg}, OBP:{obp}, SLG:{slg}, OPS:{ops}"
 
 
 def extract_pitch_data_for_pitcher(game_data, pitcher_name):
@@ -259,10 +361,13 @@ def fetch_strike_zone_data(game_data):
 
 @app.callback(
     Output('live-pitch-data-graph', 'figure'),
-    [Input('fetch-button', 'n_clicks'), Input('interval-component', 'n_intervals')],
-    [State('gamepk-input', 'value'), State('pitcher-name-input', 'value')]
+    [Input('fetch-button', 'n_clicks'),
+     Input('interval-component', 'n_intervals'),
+     Input('toggle-labels', 'value')],  # This takes the state of the checkbox
+    [State('gamepk-input', 'value'),
+     State('pitcher-name-input', 'value')]
 )
-def update_graph_live(button_clicks, n_intervals, game_id, pitcher_name):
+def update_graph_live(button_clicks, n_intervals, toggle_labels, game_id, pitcher_name):
     if not game_id or not pitcher_name:
         return go.Figure()
 
@@ -271,24 +376,29 @@ def update_graph_live(button_clicks, n_intervals, game_id, pitcher_name):
 
     fig = go.Figure()
     if not filtered_data.empty:
-        text_labels = filtered_data.apply(lambda x: f"Pitch Type: {x['pitch_name']}<br>" +
-                                                    f"Result: {x['result']}<br>" +
-                                                    f"Description: {x['description']}<br>" +
-                                                    f"Call: {x['call']}<br>" +
-                                                    f"Batter: {x['batter_name']}<br>" +
-                                                    f"Speed: {x['start_speed']} mph<br>" +
-                                                    f"Spin Rate: {x['spin_rate']} rpm", axis=1)
+        mode = 'markers+lines+text' if toggle_labels else 'markers+lines'  # Decide whether to include text based on toggle_labels
         fig.add_trace(go.Scatter(
-            x=list(range(len(filtered_data))), y=filtered_data['start_speed'],
-            mode='markers+lines', name='Pitch Speed',
-            text=text_labels, hoverinfo='text+y'
+            x=list(range(len(filtered_data))), 
+            y=filtered_data['start_speed'],
+            mode=mode,  # Use the mode variable here
+            name='Pitch Speed',
+            text=filtered_data.apply(lambda x: f"{x['pitch_name']}: {x['start_speed']} mph", axis=1),
+            textposition='top center',
+            hoverinfo='text',
+            hovertemplate='%{text}<extra></extra>'
         ))
         fig.add_trace(go.Scatter(
-            x=list(range(len(filtered_data))), y=filtered_data['spin_rate'],
-            mode='markers+lines', name='Spin Rate',
-            yaxis='y2', text=text_labels, hoverinfo='text+y'
+            x=list(range(len(filtered_data))), 
+            y=filtered_data['spin_rate'],
+            mode=mode,  # Use the mode variable here
+            name='Spin Rate',
+            yaxis='y2', 
+            text=filtered_data.apply(lambda x: f"{x['pitch_name']}: {x['spin_rate']} rpm", axis=1),
+            textposition='top center',
+            hoverinfo='text',
+            hovertemplate='%{text}<extra></extra>'
         ))
-
+        
         fig.update_layout(
             yaxis=dict(title='Start Speed (mph)'),
             yaxis2=dict(title='Spin Rate (rpm)', overlaying='y', side='right')
@@ -296,6 +406,8 @@ def update_graph_live(button_clicks, n_intervals, game_id, pitcher_name):
         fig.update_layout(transition={'duration': 500})
 
     return fig
+
+
 
 
 def extract_current_at_bat_pitch_locations(game_data):
@@ -333,7 +445,6 @@ def fetch_current_play_data(game_data):
     # Navigate to the correct path to extract current play data
     current_play = game_data.get('scoreboard', {}).get('currentPlay', {})
     if current_play:
-        print(f"Current play data found: {current_play}")
         return current_play
     else:
         print("No current play data found.")
