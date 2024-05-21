@@ -1,18 +1,20 @@
 import dash
-from dash import dcc, html
+from dash import dcc, html,dash_table
 from dash.dependencies import Input, Output, State
 import plotly.graph_objects as go
+import pybaseball.cache
 import requests
 import json
 import pandas as pd
-from pybaseball import batting_stats_bref
+import pybaseball
 session = requests.Session()
+
+pybaseball.cache.enable()
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
 app.layout = html.Div([
-    html.H1("Baseball Pitch Data Visualization", style={'text-align': 'center'}),
     html.Div([
         dcc.Input(id='gamepk-input', type='text', placeholder='Enter Game PK', style={'marginRight': '10px'}),
-        dcc.Input(id='pitcher-name-input', type='text', placeholder='Enter Pitcher Name', style={'marginRight': '10px'}),
+        dcc.Input(id='pitcher-name-input', type='text', placeholder='Enter Pitcher Name', style={'marginRight': '10px'}), html.Button('Fetch Data', id='fetch-button', n_clicks=0),
                 html.Div([
         dcc.Dropdown(
             id='pitcher-dropdown',
@@ -21,21 +23,25 @@ app.layout = html.Div([
             style={'width': '300px', 'margin': '10px'}
         )
     ], style={'text-align': 'center'}),
-        html.Button('Fetch Data', id='fetch-button', n_clicks=0),
+       
         dcc.Interval(id='interval-component', interval=20*10000000, n_intervals=0)
     ], style={'text-align': 'center', 'padding': '10px'}),
     html.Div([
         html.Div([
-            dcc.Graph(id='strike-zone-graph', style={'height': '50vh', 'width': '100%', 'margin': '0', 'padding': '0'})
+            dcc.Graph(id='strike-zone-graph', style={'height': '40vh', 'width': '80%', 'margin': '0', 'padding': '0'})
         ], style={'display': 'inline-block', 'width': '33.33%', 'padding': '0', 'margin': '0'}),
         html.Div([
-            dcc.Graph(id='current-zone-graph', style={'height': '50vh', 'width': '100%', 'margin': '0', 'padding': '0'})
+            dcc.Graph(id='current-zone-graph', style={'height': '40vh', 'width': '80%', 'margin': '0', 'padding': '0'})
         ], style={'display': 'inline-block', 'width': '33.33%', 'padding': '0', 'margin': '0'}),
     html.Div([
-            dcc.Graph(id='win-probability-graph', style={'height': '50vh', 'width': '100%', 'margin': '0', 'padding': '0'})
+            dcc.Graph(id='win-probability-graph', style={'height': '40vh', 'width': '100%', 'margin': '0', 'padding': '0'})
         ], style={'display': 'inline-block', 'width': '33.33%', 'padding': '0', 'margin': '0'})
     ], style={'width': '100%', 'padding': '0', 'margin': '0'}),
+    
     html.Div([
+    html.Div(id='pitcher-table-container', style={'width': '50%'}),
+    html.Div(id='batter-table-container', style={'width': '50%'})
+], style={'display': 'flex'}),html.Div([
         dcc.Graph(id='live-pitch-data-graph', style={'height': '50vh', 'width': '100%', 'margin': '0'})
     ]),
     html.Div([
@@ -48,6 +54,7 @@ app.layout = html.Div([
             style={'display': 'inline-block'}
         )
     ])
+    
 ])
 color_dict = {
                     'Changeup': 'red',
@@ -66,7 +73,8 @@ color_dict = {
                     'Splitter': 'navy',
                     'Sweeper': 'maroon'
                 }
-stats = batting_stats_bref(2024)
+batting_stats = pybaseball.batting_stats(2024,qual=0)
+pitching_stats = pybaseball.pitching_stats(2024,qual=0)
 
 
 @app.callback(
@@ -96,6 +104,71 @@ def update_pitcher_dropdown(n_clicks, gamepk):
 
     # If the 'Fetch Data' button has not been clicked, return an empty list
     return []
+
+@app.callback(
+    Output('pitcher-table-container', 'children'),
+    Output('batter-table-container', 'children'),
+    [Input('fetch-button', 'n_clicks'), Input('interval-component', 'n_intervals')],
+    [State('gamepk-input', 'value'), State('pitcher-name-input', 'value')]  # Add the text box's id and value property
+)
+def update_stat_table(n_clicks, n_intervals, gamepk, pitcher_name):  # Add a parameter for the text box's value
+    if n_clicks > 0 and gamepk:
+        game_data = fetch_game_data(gamepk)
+        current_play_data = fetch_current_play_data(game_data)
+
+
+        # Extract batter's and pitcher's full name
+        batter_name = current_play_data.get('matchup', {}).get('batter', {}).get('fullName', 'Unknown')
+
+        batter_player_dict = fetch_batter_statline(batter_name)
+        pitcher_player_dict = fetch_pitcher_statline(pitcher_name)
+
+        if isinstance(batter_player_dict, str) or isinstance(pitcher_player_dict, str):  # If no stats were found
+            return [],[]
+
+        # Create the columns for each table
+        batter_columns = [{"name": i, "id": i} for i in batter_player_dict.keys()]
+        pitcher_columns = [{"name": i, "id": i} for i in pitcher_player_dict.keys()]
+
+        # Create the data for each table
+        batter_data = [batter_player_dict]
+        pitcher_data = [pitcher_player_dict]
+
+        # Create the tables
+        batter_table = dash_table.DataTable(
+            id='batter-slashline-table',
+            columns=batter_columns,
+            data=batter_data,
+            style_cell={'textAlign': 'left'},
+            style_header={
+                'backgroundColor': 'paleturquoise',
+                'fontWeight': 'bold'
+            },
+            style_data={
+                'backgroundColor': 'lavender',
+            }
+        )
+
+        pitcher_table = dash_table.DataTable(
+            id='pitcher-slashline-table',
+            columns=pitcher_columns,
+            data=pitcher_data,
+            style_cell={'textAlign': 'left'},
+            style_header={
+                'backgroundColor': 'paleturquoise',
+                'fontWeight': 'bold'
+            },
+            style_data={
+                'backgroundColor': 'lavender',
+                'minWidth': '25px',  # set minimum cell width
+                'width': '25px'
+            },
+            style_table={'height': '10vh', 'width': '95%', 'overflowY': 'auto', 'margin': 'auto'}
+        )
+
+        return [pitcher_table], [batter_table]
+
+    return [], []
 
 
 @app.callback(
@@ -153,7 +226,7 @@ def update_current_zone(n_clicks, n_intervals, game_pk, pitcher_name):
 
                 # Set figure properties
                 fig.update_layout(
-                    title=f"Strike Zone with Current Pitch Location for {pitcher_name},<br>{fetch_player_slashline(batter_name)}",  # Update the title with the batter's name
+                    title=f"Strike Zone with Current Pitch Location for {pitcher_name}",  # Update the title with the batter's name
                     xaxis_title="Width (feet)",
                     yaxis_title="Height (feet)",
                     showlegend=False,
@@ -165,6 +238,41 @@ def update_current_zone(n_clicks, n_intervals, game_pk, pitcher_name):
                 )
                 return fig
     return go.Figure()  # Return an empty figure if no data
+    
+
+
+def fetch_pitcher_statline(pitcher_name):
+    # Define the stats we care about
+    stats_we_care_about = ['Name','Age','AVG','G','BABIP','BB','HR','ER','ERA','FIP','WHIP','HBP','IP','SO','SV','WAR','xFIP']
+
+    # Filter the stats for the specific batter
+    player_stats = pitching_stats.query('Name == @pitcher_name')
+
+    # Check if the DataFrame is empty
+    if player_stats.empty:
+        return f"No stats found for {pitcher_name}"
+
+    # Get the stats we care about and store them in a dictionary
+    player_dict = player_stats[stats_we_care_about].iloc[0].to_dict()
+
+    return player_dict
+
+def fetch_batter_statline(batter_name):
+    # Define the stats we care about
+    stats_we_care_about = ['Name','Age','G', 'AVG','BABIP','BB', 'HR','PA', 'H',   'RBI',   'OBP', 'OPS', 'ISO', 'K%',  'wOBA',  'wRC+','WAR']
+
+    # Filter the stats for the specific batter
+    player_stats = batting_stats.query('Name == @batter_name')
+
+    # Check if the DataFrame is empty
+    if player_stats.empty:
+        return f"No stats found for {batter_name}"
+
+    # Get the stats we care about and store them in a dictionary
+    player_dict = player_stats[stats_we_care_about].iloc[0].to_dict()
+
+    return player_dict
+
 
 @app.callback(
     Output('win-probability-graph', 'figure'),
@@ -176,16 +284,25 @@ def update_win_probability_graph(n_clicks, n_intervals, game_pk):
         game_data = fetch_game_data(game_pk)
         previous_result = extract_current_result(game_data)
         if game_data:
-            home_win_prob, away_win_prob,home_team,away_team = extract_win_probabilities(game_data)
+            home_win_probs, away_win_probs, home_team, away_team = extract_win_probabilities(game_data)
 
-            if home_win_prob is not None and away_win_prob is not None:
+            if home_win_probs is not None and away_win_probs is not None:
                 fig = go.Figure()
 
-                fig.add_trace(go.Bar(
-                    x=[home_team, away_team],
-                    y=[home_win_prob, away_win_prob],
-                    name='Win Probability',
-                    marker_color=['blue', 'red']
+                fig.add_trace(go.Scatter(
+                    x=list(range(len(home_win_probs))),
+                    y=home_win_probs,
+                    mode='lines',
+                    name=home_team,
+                    line=dict(color='blue')
+                ))
+
+                fig.add_trace(go.Scatter(
+                    x=list(range(len(away_win_probs))),
+                    y=away_win_probs,
+                    mode='lines',
+                    name=away_team,
+                    line=dict(color='red')
                 ))
 
                 # Check if previous_result is None
@@ -195,8 +312,8 @@ def update_win_probability_graph(n_clicks, n_intervals, game_pk):
                 fig.update_layout(
                     title=home_team+" vs "+away_team+ " Win Probability<br>Previous Result: "+previous_result,
                     yaxis_title="Win Probability",
-                    xaxis_title="Team",
-                    showlegend=False
+                    xaxis_title="Time",
+                    showlegend=True
                 )
 
                 return fig
@@ -391,15 +508,14 @@ def extract_pitch_details(pitches):
 def extract_win_probabilities(game_data):
     """Extracts win probabilities and team names."""
     try:
-        wpa = game_data['scoreboard']['stats']['wpa']['gameWpa'][-1]
-        home_win_prob = wpa['homeTeamWinProbability']
-        away_win_prob = wpa['awayTeamWinProbability']
+        wpa_list = game_data['scoreboard']['stats']['wpa']['gameWpa']
+        home_win_probs = [wpa['homeTeamWinProbability'] for wpa in wpa_list]
+        away_win_probs = [wpa['awayTeamWinProbability'] for wpa in wpa_list]
         home_team = game_data['home_team_data']['name']
         away_team = game_data['away_team_data']['name']
-        return home_win_prob, away_win_prob, home_team, away_team
+        return home_win_probs, away_win_probs, home_team, away_team
     except KeyError:
         return None, None, None, None
-
 def extract_current_result(game_data):
     """Extracts the result of the current play."""
     try:
@@ -448,19 +564,9 @@ def extract_current_at_bat_pitch_locations(game_data):
     return locations
 
 
-def fetch_player_slashline(batter_name):
 
-    player_stats = stats[stats['Name'] == batter_name]
 
-    # Get the player's slash line
-    games = player_stats['G'].values[0]
-    avg = player_stats['BA'].values[0]
-    obp = player_stats['OBP'].values[0]
-    slg = player_stats['SLG'].values[0]
-    ops = player_stats['OPS'].values[0]
-    hr = player_stats['HR'].values[0]
-
-    return f"{batter_name}: AVG:{avg:.3f}, OBP:{obp:.3f}, SLG:{slg:.3f}, OPS:{ops:.3f}, HR:{hr}, G:{games}"
+ 
 
 
 
