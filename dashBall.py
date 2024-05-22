@@ -80,7 +80,6 @@ color_dict = {
                     'Sweeper': 'maroon'
                 }
 
-
 ############### CALLBACKS ###############
 
 #############Data Storage################
@@ -106,6 +105,7 @@ def update_pitcher_name_input(selected_pitcher):
     return selected_pitcher or ''
 
 ##########Pitcher Drop Down Menu###########
+
 @app.callback(
     Output('pitcher-dropdown', 'options'),
     Input('game-data-store', 'data')
@@ -159,7 +159,6 @@ def update_stat_table(stored_data, current_pitcher_name):
 
 #######Current AB Zone Graph#################
 
-
 @app.callback(
     Output('current-zone-graph', 'figure'),
     [Input('game-data-store', 'data')],
@@ -197,23 +196,16 @@ def update_current_zone(stored_data, pitcher_name):
 
                     color = color_dict.get(pitch_type, 'black')  # Use black for unknown pitch types
 
-                    fig.add_trace(go.Scatter(
-                        x=[px],
-                        y=[pz],
-                        mode='markers',
-                        marker=dict(color=color, size=15),
-                        name=pitch_type,
-                        hovertemplate=f"Type: {pitch_type}<br>Speed: {pitch_speed} mph<br>Spin rate: {spin_rate}<br>Count: {count}<br>Call: {call}<br>Batter: {batter_name}"
-                    ))
+                    add_trace(fig, [px], [pz], 'markers', pitch_type, None, 'y1', 
+          dict(color=color, size=15), None, 
+          f"Type: {pitch_type}<br>Speed: {pitch_speed} mph<br>Spin rate: {spin_rate}<br>Count: {count}<br>Call: {call}<br>Batter: {batter_name}")
 
                 # Set figure properties
                 set_figure_layout(fig, f"Current Pitch Location for {pitcher_name}<br>Current Batter {batter_name}", "Width (feet)", "Height (feet)")
                 return fig
     return go.Figure()  # Return an empty figure if no data
 
-    
 #########Cumulative Zone Graph##################
-
 
 @app.callback(
     Output('strike-zone-graph', 'figure'),
@@ -232,13 +224,9 @@ def update_strike_zone(stored_data, pitcher_name):
 
             # Plot each pitch location
             for location in pitch_locations:
-                fig.add_trace(go.Scatter(
-                    x=[location['px']],
-                    y=[location['pz']],
-                    mode='markers+text',
-                    marker=dict(color=color_dict.get(location['pitch_name'], 'black'), size=15),  # Default to black if not found
-                    hovertemplate=f"<br>Speed: {location['start_speed']} mph<br>Result: {location['result']}<br>Spin Rate: {location['spin_rate']} rpm<br>Call: {location['call']}<br>Batter: {location['batter_name']}<br>Inning: {location['inning']}<br>Pitch Type: {location['pitch_name']}"
-                ))
+                add_trace(fig, [location['px']], [location['pz']], 'markers+text', None, None, 'y1', 
+          dict(color=color_dict.get(location['pitch_name'], 'black'), size=15), None, 
+          f"<br>Speed: {location['start_speed']} mph<br>Result: {location['result']}<br>Spin Rate: {location['spin_rate']} rpm<br>Call: {location['call']}<br>Result: {location['result']}<br>Batter: {location['batter_name']}<br>Inning: {location['inning']}<br>Pitch Type: {location['pitch_name']}")
 
             # Set figure properties
             set_figure_layout(fig, "Strike Zone with All Pitch Locations", "Width (feet)", "Height (feet)")
@@ -261,21 +249,9 @@ def update_win_probability_graph(stored_data):
             if home_win_probs is not None and away_win_probs is not None:
                 fig = go.Figure()
 
-                fig.add_trace(go.Scatter(
-                    x=list(range(len(home_win_probs))),
-                    y=home_win_probs,
-                    mode='lines',
-                    name=home_team,
-                    line=dict(color='blue')
-                ))
+                add_trace(fig, list(range(len(home_win_probs))), home_win_probs, 'lines', home_team, None, 'y1', None, dict(color='blue'))
 
-                fig.add_trace(go.Scatter(
-                    x=list(range(len(away_win_probs))),
-                    y=away_win_probs,
-                    mode='lines',
-                    name=away_team,
-                    line=dict(color='red')
-                ))
+                add_trace(fig, list(range(len(away_win_probs))), away_win_probs, 'lines', away_team, None, 'y1', None, dict(color='red'))
 
                 # Check if previous_result is None
                 if previous_result is None:
@@ -294,7 +270,6 @@ def update_win_probability_graph(stored_data):
     return go.Figure()  # Return an empty figure if no data
 
 #############Speed/Spinrate Graph##################
-
 
 @app.callback(
     Output('live-pitch-data-graph', 'figure'),
@@ -320,27 +295,11 @@ def update_graph_live(button_clicks, n_intervals, toggle_labels, game_id, pitche
     fig = go.Figure()
     if not filtered_data.empty:  # Check if the DataFrame is not empty
         mode = 'markers+lines+text' if toggle_labels else 'markers+lines'  # Decide whether to include text based on toggle_labels
-        fig.add_trace(go.Scatter(
-            x=list(range(len(filtered_data))), 
-            y=filtered_data['start_speed'],
-            mode=mode,  # Use the mode variable here
-            name='Pitch Speed',
-            text=filtered_data.apply(lambda x: f"{x['pitch_name']}: {x['start_speed']} mph", axis=1),
-            textposition='top center',
-            hoverinfo='text',
-            hovertemplate='%{text}<extra></extra>'
-        ))
-        fig.add_trace(go.Scatter(
-            x=list(range(len(filtered_data))), 
-            y=filtered_data['spin_rate'],
-            mode=mode,  # Use the mode variable here
-            name='Spin Rate',
-            yaxis='y2', 
-            text=filtered_data.apply(lambda x: f"{x['pitch_name']}: {x['spin_rate']} rpm", axis=1),
-            textposition='top center',
-            hoverinfo='text',
-            hovertemplate='%{text}<extra></extra>'
-        ))
+        add_trace(fig, list(range(len(filtered_data))), filtered_data['start_speed'], mode, 'Pitch Speed', 
+          filtered_data.apply(lambda x: f"{x['pitch_name']}: {x['start_speed']} mph", axis=1))
+
+        add_trace(fig, list(range(len(filtered_data))), filtered_data['spin_rate'], mode, 'Spin Rate', 
+          filtered_data.apply(lambda x: f"{x['pitch_name']}: {x['spin_rate']} rpm", axis=1), 'y2')
         
         fig.update_layout(
             yaxis=dict(title='Start Speed (mph)'),
@@ -352,13 +311,35 @@ def update_graph_live(button_clicks, n_intervals, toggle_labels, game_id, pitche
 
 #########Callback Functions################
 
+def add_trace(fig, x_data, y_data, mode, name, text_data=None, yaxis='y1', marker_dict=None, line_dict=None, hovertemplate=None):
+    trace = go.Scatter(
+        x=x_data,
+        y=y_data,
+        mode=mode,
+        name=name,
+        yaxis=yaxis
+    )
+    if text_data is not None:
+        trace['text'] = text_data
+        trace['textposition'] = 'top center'
+        trace['hoverinfo'] = 'text'
+        trace['hovertemplate'] = '%{text}<extra></extra>'
+    if marker_dict is not None:
+        trace['marker'] = marker_dict
+    if line_dict is not None:
+        trace['line'] = line_dict
+    if hovertemplate is not None:
+        trace['hovertemplate'] = hovertemplate
+    fig.add_trace(trace)
 
+    
 def draw_strike_zone(fig, strike_zone_data):
     """ Add a rectangle for the strike zone to a figure. """
     fig.add_shape(type="rect",
                   x0=-0.7083, y0=strike_zone_data['bottom'],
                   x1=0.7083, y1=strike_zone_data['top'],
                   line=dict(color="RoyalBlue"))
+
 
 def set_figure_layout(fig, title, xaxis_title, yaxis_title):
     """ Set layout properties for the figure. """
@@ -371,7 +352,6 @@ def set_figure_layout(fig, title, xaxis_title, yaxis_title):
         yaxis=dict(range=[0, 5], scaleratio=1),
         xaxis_range=[-2.5, 2.5]
     )
-
 
 
 if __name__ == '__main__':
