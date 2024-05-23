@@ -39,3 +39,23 @@ def create_events_table(events):
         },
         style_table={'height': '17.5vh', 'width': '95%', 'overflowY': 'auto', 'margin': 'auto'}
     )
+
+
+def create_events_table(events):
+    columns = [{"name": i, "id": i} for i in events[0].keys()] if events else []
+    return dash_table.DataTable(
+        id='recent-events-table',
+        columns=columns,
+        data=events,
+        style_cell={'textAlign': 'left'},
+        style_header={
+            'backgroundColor': 'paleturquoise',
+            'fontWeight': 'bold'
+        },
+        style_data={
+            'backgroundColor': 'lavender',
+            'minWidth': '25px',
+            'width': '25px'
+        },
+        style_table={'height': '17.5vh', 'width': '95%', 'overflowY': 'auto', 'margin': 'auto'}
+    )

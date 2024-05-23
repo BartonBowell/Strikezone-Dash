@@ -7,6 +7,34 @@ player_pitching_stats = pybaseball.pitching_stats(2024,qual=1)
 team_batting_stats = pybaseball.team_batting(2024)
 team_pitching_stats = pybaseball.team_pitching(2024)
 
+def extract_team_player_stats(team_name):
+    
+    # Define the stats we care about
+    stats_we_care_about = ['AVG', 'BABIP', 'BB', 'Balls', 'HR', 'OBP', 'OPS', 'PA', 'R', 'RBI', 'SLG', 'SO', 'WAR', 'wOBA', 'wRC+', 'ISO', 'K%', 'BB%']
+    
+    stats = player_batting_stats
+    # Filter players by the specified team
+    team_players = player_batting_stats[player_batting_stats['Team'] == team_name]
+    
+    # Create a dictionary to hold each player's stats
+    player_stats_dict = {}
+    
+    for index, row in team_players.iterrows():
+        player_name = row['Name']
+        player_stats = row[stats_we_care_about].to_dict()
+        
+        # Round and format each stat
+        for key, value in player_stats.items():
+            if isinstance(value, float):
+                if key.endswith('%'):
+                    player_stats[key] = f"{round(value * 100, 2)}%"
+                else:
+                    player_stats[key] = round(value, 3)
+        
+        # Store in dictionary
+        player_stats_dict[player_name] = player_stats
+
+    return player_stats_dict
 
 #Takes the dataframe, stat we want to filter by, and the team name if we want to filter by team
 def extract_stats(df, stats_we_care_about, team_name=None):
@@ -14,15 +42,15 @@ def extract_stats(df, stats_we_care_about, team_name=None):
     formatted_stats = format_stats(averages)
     return formatted_stats
 
-#Extracts the pitching stats for a specific team
-def extract_league_pitching_team_stats():
+# Extracts the pitching stats for a specific team
+def extract_league_pitching_team_stats(team_name=None):
     stats_we_care_about = ['AVG','BABIP','Balls','Strikes','BB','ER','ERA','FIP','WHIP','H','HR','WAR','xFIP']
-    return extract_stats(team_pitching_stats, stats_we_care_about)
+    return extract_stats(team_pitching_stats, stats_we_care_about, team_name)
 
-#Extracts the batting stats for a specific team
-def extract_league_batting_team_stats():
+# Extracts the batting stats for a specific team
+def extract_league_batting_team_stats(team_name=None):
     stats_we_care_about = ['AVG', 'BABIP','BB','Balls','HR','OBP','OPS','PA','R','RBI','SLG','SO','WAR','wOBA']
-    return extract_stats(team_batting_stats, stats_we_care_about)
+    return extract_stats(team_batting_stats, stats_we_care_about, team_name)
 
 #Extracts the pitching stats for a specific player
 def extract_pitch_statline(pitcher_name):
@@ -136,8 +164,9 @@ def extract_win_probabilities(game_data):
         wpa_list = game_data['scoreboard']['stats']['wpa']['gameWpa']
         home_win_probs = [wpa['homeTeamWinProbability'] for wpa in wpa_list]
         away_win_probs = [wpa['awayTeamWinProbability'] for wpa in wpa_list]
-        home_team = game_data['home_team_data']['name']
-        away_team = game_data['away_team_data']['name']
+        home_team = game_data['home_team_data']['abbreviation']
+        away_team = game_data['away_team_data']['abbreviation']
+
         return home_win_probs, away_win_probs, home_team, away_team
     except KeyError:
         return None, None, None, None
@@ -244,3 +273,4 @@ def round_stats(stats_dict):
             else:
                 stats_dict[key] = round(stats_dict[key], 3)
     return stats_dict
+
