@@ -5,9 +5,8 @@ import plotly.graph_objects as go
 import numpy as py
 import pandas as pd
 import pybaseball
-import dataBall
-import fetchBall
-import tableBall
+import dataBall, fetchBall, tableBall, stadiumBall, runnerBall
+
 
 
 ############### DASH APP / HTML LAYOUT ###############
@@ -40,13 +39,15 @@ dcc.Input(id='pitcher-name-input', type='text', placeholder='Enter Pitcher Name'
     html.Div([
         html.Div([
             dcc.Graph(id='strike-zone-graph', style={'width': '80%', 'margin': '0', 'padding': '0'})
-        ], style={'display': 'inline-block', 'width': '33.33%', 'padding': '0', 'margin': '0'}),
+        ], style={'display': 'inline-block', 'width': '25%', 'padding': '0', 'margin': '0'}),
         html.Div([
-            dcc.Graph(id='current-zone-graph', style={'width': '80%', 'margin': '0', 'padding': '0'})
-        ], style={'display': 'inline-block', 'width': '33.33%', 'padding': '0', 'margin': '0'}),
+    dcc.Graph(id='current-zone-graph', style={'width': '80%', 'margin': '0', 'padding': '0'})
+        ], style={'display': 'inline-block', 'width': '25%', 'padding': '0', 'margin': '0'}),
     html.Div([
-            dcc.Graph(id='win-probability-graph', style={'width': '100%', 'margin': '0', 'padding': '0'})
-        ], style={'display': 'inline-block', 'width': '33.33%', 'padding': '0', 'margin': '0'})
+           dcc.Graph(id='stadium-plot', style={'height': '50vh', 'width': '100%', 'margin': '0'}),
+        ], style={'display': 'inline-block', 'width': '25%', 'padding': '0', 'margin': '0'}),html.Div([
+             dcc.Graph(id='win-probability-graph', style={'width': '100%', 'margin': '0', 'padding': '0'})
+        ], style={'display': 'inline-block', 'width': '25%', 'padding': '0', 'margin': '0'})
     ], style={'width': '100%', 'padding': '0', 'margin': '0'}),
     
 html.Div([
@@ -103,6 +104,10 @@ color_dict = {
                     'Splitter': 'navy',
                     'Sweeper': 'maroon'
                 }
+
+
+
+
 
 ############### CALLBACKS ###############
 
@@ -174,6 +179,31 @@ def fetch_game_data(n_intervals, n_clicks ,game_pk):
     
     return {}
 
+@app.callback(
+    [Output('gamepk-dropdown', 'options'),
+     Output('gamepk-dropdown', 'value')],
+    [Input('fetch-button', 'n_clicks')],
+    [State('gamepk-dropdown', 'value')]
+)
+def update_gamepk_dropdown(n_clicks, current_value):
+    if n_clicks > 0:
+        game_info = fetchBall.get_game_pks_and_teams()
+        options = [{'label': f"{info[1]} vs {info[2]}", 'value': info[0]} for info in game_info]
+        return options, options[0]['value'] if options and n_clicks == 1 else current_value
+    return [], None
+
+
+@app.callback(
+    Output('stadium-plot', 'figure'),
+    [Input('interval-component', 'n_intervals'),
+     Input('game-data-store', 'data')]
+)
+def update_plot(n, stored_data):
+    if stored_data and 'game_data' in stored_data:
+        runners = runnerBall.get_base_runners(stored_data['game_data'])
+        return stadiumBall.plot_stadium('mariners', runners=runners, title='')
+    else:
+        return go.Figure()  # Return an empty figure if there's no data
 ##########Pitcher Name Input##############
 
 @app.callback(
@@ -185,6 +215,15 @@ def update_pitcher_name_input(selected_pitcher):
 
 ##########Pitcher Drop Down Menu###########
 
+
+
+
+
+
+
+
+
+############
 @app.callback(
     [Output('pitcher-dropdown', 'options'),
      Output('pitcher-dropdown', 'value')],
@@ -201,18 +240,6 @@ def update_pitcher_dropdown(data, n_clicks, current_value):
     return [], None
 
 
-@app.callback(
-    [Output('gamepk-dropdown', 'options'),
-     Output('gamepk-dropdown', 'value')],
-    [Input('fetch-button', 'n_clicks')],
-    [State('gamepk-dropdown', 'value')]
-)
-def update_gamepk_dropdown(n_clicks, current_value):
-    if n_clicks > 0:
-        game_info = fetchBall.get_game_pks_and_teams()
-        options = [{'label': f"{info[1]} vs {info[2]}", 'value': info[0]} for info in game_info]
-        return options, options[0]['value'] if options and n_clicks == 1 else current_value
-    return [], None
 
 #############Stat/Event Tables###############
 
