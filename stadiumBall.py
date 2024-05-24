@@ -22,7 +22,7 @@ STADIUM_COORDS = transform_coordinates(stadium_coords, scale=STADIUM_SCALE)
 
 import plotly.graph_objects as go
 
-def plot_stadium(team, runners=None, title=None, width=None, height=None):
+def plot_stadium(team, runners=None,defenders=None, title=None, width=None, height=None):
     """
     Plot the outline of the specified team's stadium with base runners using transformed MLBAM coordinates with Plotly.
     Hovering over any point will display its x/y coordinates.
@@ -39,10 +39,24 @@ def plot_stadium(team, runners=None, title=None, width=None, height=None):
     """
     # Hardcoded base coordinates
     base_coords = {
-        '1B': (155, -172),  # These are example coordinates
-        '2B': (125, -145),
-        '3B': (95, -172)
+        'first': (155, -172),  # These are example coordinates
+        'second': (125, -145),
+        'third': (95, -172)
     }
+
+
+    position_coords = {
+    #'pitcher': (125, -172),  # These are example coordinates
+    'shortstop': (105, -155),
+    'catcher': (125, -205),
+    'first': (155, -172),
+    'second': (125, -145),
+    'third': (95, -172),
+    
+    'left': (55, -90),
+    'center': (125, -70),
+    'right': (180, -90)
+}
 
     coords = STADIUM_COORDS[STADIUM_COORDS['team'] == team.lower()]
     fig = go.Figure()
@@ -66,15 +80,37 @@ def plot_stadium(team, runners=None, title=None, width=None, height=None):
             base_position = runner['base']
             if base_position in base_coords:
                 coord = base_coords[base_position]
+                text_position = 'bottom center' if base_position in ['first', 'third'] else 'top center'
                 fig.add_trace(go.Scatter(
                     x=[coord[0]],
                     y=[coord[1]],
                     mode='markers+text',
-                    name=runner['name'],
                     text=[runner['name']],
-                    textposition='top center',
-                    marker=dict(size=12, color='blue'),
+                    textposition=text_position,
+                    textfont=dict(size=8),
+                    marker=dict(size=10, color='blue'),
                     hovertemplate=f"Runner: {runner['name']}<br>x: %{{x}}<br>y: %{{y}}<extra></extra>"
+                ))
+
+    # Add defenders to the plot with hover text
+    if defenders:
+        for defender in defenders:
+            position = defender['position']
+            if position in position_coords:
+                # Check if a runner is at the same base as the defender
+                if runners and any(runner['base'] == position for runner in runners):
+                    continue  # Skip this defender
+                coord = position_coords[position]
+                text_position = 'bottom center' if position in ['catcher', 'first', 'third','shortstop'] else 'top center'
+                fig.add_trace(go.Scatter(
+                    x=[coord[0]],
+                    y=[coord[1]],
+                    mode='markers+text',
+                    text=[f"{defender['name']}"],  # Add position to label
+                    textposition=text_position,
+                    textfont=dict(size=8),
+                    marker=dict(size=8, color='red'),
+                    hovertemplate=f"Defender: {defender['name']}<br>Position: {position}<br>x: %{{x}}<br>y: %{{y}}<extra></extra>"
                 ))
 
     # Enhance hover experience

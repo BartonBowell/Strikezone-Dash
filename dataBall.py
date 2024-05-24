@@ -3,7 +3,9 @@ from unidecode import unidecode
 
 
 player_batting_stats = pybaseball.batting_stats(2024,qual=1)
+qualified_player_batting_stats = pybaseball.batting_stats(2024)
 player_pitching_stats = pybaseball.pitching_stats(2024,qual=1)
+qualified_player_pitching_stats = pybaseball.pitching_stats(2024)
 team_batting_stats = pybaseball.team_batting(2024)
 team_pitching_stats = pybaseball.team_pitching(2024)
 
@@ -247,15 +249,22 @@ def extract_all_game_pitching_events(game_data):
                 # Format the count as 'Balls-Strikes'
                 count = f"{play_details.get('balls', 0)}-{play_details.get('strikes', 0)}"
                 
+                # Get the current scores
+                home_score = game_data.get('scoreboard', {}).get('linescore', {}).get('teams', {}).get('home', {}).get('runs', 0)
+                away_score = game_data.get('scoreboard', {}).get('linescore', {}).get('teams', {}).get('away', {}).get('runs', 0)
+                score = f"{home_score}-{away_score}"  # Display the score as 'home-away'
+                
                 event_info = {
-                    'Pitch Type': play_details.get('pitch_name'),
+                    'Pitch Type': play_details.get('pitch_type'),
                     'Batter': play_details.get('batter_name'),
                     'Pitcher': play_details.get('pitcher_name'),
                     'Outs': play_details.get('outs'),
                     'Count': count,
                     'Spin Rate': play_details.get('spin_rate'),
                     'Result': play_details.get('result'),
-                    'Pitch #': play_details.get('game_total_pitches')
+                    'Pitch Count': play_details.get('player_total_pitches'),
+                    'Pitch #': play_details.get('game_total_pitches'),
+                    'Score': score  # Add the current score
                 }
                 all_events.append(event_info)
 

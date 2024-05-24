@@ -30,22 +30,50 @@ def fetch_and_process_game_data(game_pk):
 
 def get_base_runners(current_play):
     """
-    Retrieves current base runners, their end base, and the event that got them on base.
+    Retrieves current base runners and their base.
     
     Args:
-    current_play (dict): The game data containing current play and runners information.
+    current_play (dict): The game data containing current play and offense information.
     
     Returns:
     list of dicts: List containing information about each runner.
     """
     runners_info = []
-    runners = current_play['scoreboard']['currentPlay'].get('runners', []) # Get the runners list, default to empty list if not found
-    for runner in runners:
+    offense = current_play['scoreboard']['linescore'].get('offense', {})  # Get the offense data, default to empty dict if not found
+    
+    # Check for runners on each base
+    for base in ['first', 'second', 'third']:
+        runner = offense.get(base)  # Get the runner on the base, default to None if not found
         if runner:  # Check if runner is not None
-            name = runner['details']['runner']['fullName']
-            base = runner['movement']['start']  # Directly assign the start value to base
+            name = runner['fullName']
             runners_info.append({
                 'name': name,
                 'base': base
             })
+    
     return runners_info
+
+def get_defenders(current_play):
+    """
+    Retrieves current defenders and their positions.
+    
+    Args:
+    current_play (dict): The game data containing current play and defense information.
+    
+    Returns:
+    list of dicts: List containing information about each defender.
+    """
+    defenders_info = []
+    defense = current_play['scoreboard']['linescore'].get('defense', {})  # Get the defense data, default to empty dict if not found
+    
+    # Check for defenders in each position
+    for position in ['pitcher', 'catcher', 'first', 'second', 'third', 'shortstop', 'left', 'center', 'right']:
+        defender = defense.get(position)  # Get the defender in the position, default to None if not found
+        if defender:  # Check if defender is not None
+            name = defender['fullName']
+            defenders_info.append({
+                'name': name,
+                'position': position
+            })
+    
+    return defenders_info

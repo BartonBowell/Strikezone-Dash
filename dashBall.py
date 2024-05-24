@@ -1,5 +1,7 @@
 import dash
 from dash import dcc, html,dash_table
+import dash_bootstrap_components as dbc
+import plotly.io as pio
 from dash.dependencies import Input, Output, State
 import plotly.graph_objects as go
 import numpy as py
@@ -7,86 +9,89 @@ import pandas as pd
 import pybaseball
 import dataBall, fetchBall, tableBall, stadiumBall, runnerBall
 
-
+pio.templates.default = "plotly_dark"
 
 ############### DASH APP / HTML LAYOUT ###############
 
 pybaseball.cache.enable()
-app = dash.Dash(__name__, suppress_callback_exceptions=True,external_stylesheets=['dark_theme.css'])
+app = dash.Dash(__name__, external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css'])
 app.layout = html.Div([
     dcc.Store(id='game-data-store', storage_type='memory'),
+    dcc.Interval(id='page-load', interval=1*100, max_intervals=1),
     html.Div([
-dcc.Input(id='gamepk-input', type='text', placeholder='Enter Game PK', style={'display': 'none'}),
-dcc.Input(id='pitcher-name-input', type='text', placeholder='Enter Pitcher Name', style={'display': 'none'}),
-                html.Div([
-                    html.Button('Fetch Data', id='fetch-button', n_clicks=0),
-        dcc.Dropdown(
-            id='pitcher-dropdown',
-            options=[],  # This will be populated dynamically
-            placeholder='Select a pitcher',
-            style={'width': '300px', 'margin': '10px'}
-        ),
-        dcc.Dropdown(
-            id='gamepk-dropdown',
-            options=[],  # This will be populated dynamically
-            placeholder='Select a gamepk',
-            style={'width': '300px', 'margin': '10px'}
-        )
+        dcc.Input(id='gamepk-input', type='text', placeholder='Enter Game PK', style={'display': 'none'}),
+        dcc.Input(id='pitcher-name-input', type='text', placeholder='Enter Pitcher Name', style={'display': 'none'}),
+        html.Div([
+            html.Button('Fetch Data', style={'display': 'none'}, id='fetch-button', n_clicks=0),
+            dcc.Dropdown(
+                id='pitcher-dropdown',
+                options=[],  # This will be populated dynamically
+                placeholder='Select a pitcher',
+                style={'width': '45%', 'margin': '10px'}
+            ),
+            dcc.Dropdown(
+                id='gamepk-dropdown',
+                options=[],  # This will be populated dynamically
+                placeholder='Select a gamepk',
+                style={'width': '45%', 'margin': '10px'}
+            )
+        ], style={'display': 'flex', 'justifyContent': 'space-around'}),
+        dcc.Interval(id='interval-component', interval=12*1000, n_intervals=0)
     ], style={'text-align': 'center'}),
-       
-        dcc.Interval(id='interval-component', interval=12*1000000, n_intervals=0)
-    ], style={'text-align': 'center', 'padding': '10px'}),
     html.Div([
         html.Div([
             dcc.Graph(id='strike-zone-graph', style={'width': '80%', 'margin': '0', 'padding': '0'})
         ], style={'display': 'inline-block', 'width': '25%', 'padding': '0', 'margin': '0'}),
         html.Div([
-    dcc.Graph(id='current-zone-graph', style={'width': '80%', 'margin': '0', 'padding': '0'})
+            dcc.Graph(id='current-zone-graph', style={'width': '80%', 'margin': '0', 'padding': '0'})
         ], style={'display': 'inline-block', 'width': '25%', 'padding': '0', 'margin': '0'}),
-    html.Div([
-           dcc.Graph(id='stadium-plot', style={'height': '50vh', 'width': '100%', 'margin': '0'}),
-        ], style={'display': 'inline-block', 'width': '25%', 'padding': '0', 'margin': '0'}),html.Div([
-             dcc.Graph(id='win-probability-graph', style={'width': '100%', 'margin': '0', 'padding': '0'})
+        html.Div([
+            dcc.Graph(id='win-probability-graph', style={'width': '100%', 'margin': '0', 'padding': '0'})
+        ], style={'display': 'inline-block', 'width': '25%', 'padding': '0', 'margin': '0'}),
+        html.Div([
+            dcc.Graph(id='stadium-plot', style={'height': '50vh', 'width': '100%', 'margin': '0'}),
         ], style={'display': 'inline-block', 'width': '25%', 'padding': '0', 'margin': '0'})
-    ], style={'width': '100%', 'padding': '0', 'margin': '0'}),
-    
-html.Div([
-    html.Div(id='pitcher-table-container', style={'flex': '1', 'padding': '10px'}),
-    html.Div(id='batter-table-container', style={'flex': '1', 'padding': '10px'}),
-    html.Div(id='recent-events-container', style={'flex': '1', 'padding': '10px'})
-], style={'display': 'flex', 'justify-content': 'space-around', 'align-items': 'center'})
-,html.Div([
-    dcc.Graph(id='live-pitch-data-graph', style={'height': '40vh', 'width': '100%', 'margin': '0'}),
-    
-]),html.Div([
+    ], style={'width': '100%', 'padding': '0', 'margin': '0', 'backgroundColor': '#111111'}),
     html.Div([
-        html.H2('Home Batting Stats'),
-        dash_table.DataTable(
-            id='home-batting-stats-table',
-            style_cell={'width': '100px'}
-        ),
-    ], style={'flex': '50%'}),
-
+        html.Div(id='pitcher-table-container', style={'flex': '1', 'padding': '10px'}),
+        html.Div(id='batter-table-container', style={'flex': '1', 'padding': '10px'}),
+        html.Div(id='recent-events-container', style={'flex': '1', 'padding': '10px'})
+    ], style={'display': 'flex', 'justify-content': 'space-around', 'align-items': 'center', 'backgroundColor': '#111111'}),
     html.Div([
-        html.H2('Away Batting Stats'),
-        dash_table.DataTable(
-            id='away-batting-stats-table',
-            style_cell={'width': '100px'}
+        dcc.Graph(
+            id='live-pitch-data-graph', 
+            style={'height': '40vh', 'width': '100%', 'margin': '0'},
+            figure={
+                'layout': {
+                    'paper_bgcolor': 'rgba(0, 0, 0, 0)', 
+                    'plot_bgcolor': 'rgba(0, 0, 0, 0)', 
+                    'font': {'color': 'white'}
+                }
+            },
+            config={}
         ),
-    ], style={'flex': '50%'}),
-], id='team-stats-container', style={'display': 'flex'}),
+    ]),
+    html.Div([
+        html.Div([
+            html.H2('Home Batting Stats'),
+            dash_table.DataTable(id='home-batting-stats-table', style_cell={'width': '100px'})
+        ], style={'flex': '50%'}),
+        html.Div([
+            html.H2('Away Batting Stats'),
+            dash_table.DataTable(id='away-batting-stats-table', style_cell={'width': '100px'})
+        ], style={'flex': '50%'}),
+    ], id='team-stats-container', style={'display': 'flex', 'backgroundColor': '#111111'}),
     html.Div([
         dcc.Checklist(
             id='toggle-labels',
-            options=[
-                {'label': 'Show Labels', 'value': 'show'}
-            ],
+            options=[{'label': 'Show Labels', 'value': 'show'}],
             value=[],
             style={'display': 'inline-block'}
         )
     ])
+], style={'backgroundColor': '#111111'})
     
-])
+
 color_dict = {
                     'Changeup': 'red',
                     'Curveball': 'blue',
@@ -113,17 +118,17 @@ color_dict = {
 
 
 @app.callback(
-    Output('home-batting-stats-table', 'data'),
-    Output('home-batting-stats-table', 'columns'),
-    Output('home-batting-stats-table', 'style_cell'),
-    Output('home-batting-stats-table', 'style_header'),
-    Output('home-batting-stats-table', 'style_data'),
-    Output('home-batting-stats-table', 'style_table'),
-    [Input('interval-component', 'n_intervals'), Input('game-data-store', 'data'), Input('fetch-button', 'n_clicks')]
+    [Output('home-batting-stats-table', 'data'),
+     Output('home-batting-stats-table', 'columns'),
+     Output('home-batting-stats-table', 'style_cell'),
+     Output('home-batting-stats-table', 'style_header'),
+     Output('home-batting-stats-table', 'style_data'),
+     Output('home-batting-stats-table', 'style_table')],
+    [Input('gamepk-dropdown', 'value'), Input('game-data-store', 'data')]
 )
-def update_home_batting_stats(n_intervals, data, n_clicks):
+def update_home_batting_stats(gamepk, data):
     game_data = data['game_data'] if data else None
-    if n_intervals > 0 or n_clicks > 0:
+    if gamepk:
         home_win_probs, away_win_probs, home_team, away_team = dataBall.extract_win_probabilities(game_data)
         team_replacements = {'AZ': 'ARI', 'WSH': 'WSN', 'TB': 'TBR', 'CWS': 'CHW', 'SF': 'SFG', 'SD': 'SDP', 'KC': 'KCR'}
         for old, new in team_replacements.items():
@@ -132,22 +137,21 @@ def update_home_batting_stats(n_intervals, data, n_clicks):
         df = pd.DataFrame.from_dict(home_batting_stats, orient='index')
         df.reset_index(inplace=True)
         df.columns = ['Player'] + [col for col in df.columns[1:]]  # Assuming the first column is 'Player'
-        #df = df[df['PA'] >= 20] 
-        return df.to_dict('records'), [{"name": str(i), "id": str(i)} for i in df.columns], {'textAlign': 'left', 'minWidth': '25px', 'width': '25px'}, {'backgroundColor': 'paleturquoise', 'fontWeight': 'bold'}, {'backgroundColor': 'lavender'}, { 'width': '95%', 'overflowY': 'auto', 'margin': 'auto'}
+        return df.to_dict('records'), [{"name": str(i), "id": str(i)} for i in df.columns], {'backgroundColor': 'rgb(50, 50, 50)', 'color': 'white', 'textAlign': 'left', 'minWidth': '25px', 'width': '25px'}, {'backgroundColor': 'rgb(30, 30, 30)', 'fontWeight': 'bold', 'color': 'white'}, {'backgroundColor': 'rgb(50, 50, 50)', 'color': 'white'}, { 'width': '95%', 'overflowY': 'auto', 'margin': 'auto'}
     return [], [], {}, {}, {}, {}
 
 @app.callback(
-    Output('away-batting-stats-table', 'data'),
-    Output('away-batting-stats-table', 'columns'),
-    Output('away-batting-stats-table', 'style_cell'),
-    Output('away-batting-stats-table', 'style_header'),
-    Output('away-batting-stats-table', 'style_data'),
-    Output('away-batting-stats-table', 'style_table'),
-    [Input('interval-component', 'n_intervals'), Input('game-data-store', 'data'), Input('fetch-button', 'n_clicks')]
+    [Output('away-batting-stats-table', 'data'),
+     Output('away-batting-stats-table', 'columns'),
+     Output('away-batting-stats-table', 'style_cell'),
+     Output('away-batting-stats-table', 'style_header'),
+     Output('away-batting-stats-table', 'style_data'),
+     Output('away-batting-stats-table', 'style_table')],
+    [Input('gamepk-dropdown', 'value'), Input('game-data-store', 'data')]
 )
-def update_away_batting_stats(n_intervals, data, n_clicks):
+def update_away_batting_stats(gamepk, data):
     game_data = data['game_data'] if data else None
-    if n_intervals > 0 or n_clicks > 0:
+    if gamepk:
         home_win_probs, away_win_probs, home_team, away_team = dataBall.extract_win_probabilities(game_data)
         team_replacements = {'AZ': 'ARI', 'WSH': 'WSN', 'TB': 'TBR', 'CWS': 'CHW', 'SF': 'SFG', 'SD': 'SDP', 'KC': 'KCR'}
         for old, new in team_replacements.items():
@@ -156,52 +160,66 @@ def update_away_batting_stats(n_intervals, data, n_clicks):
         df = pd.DataFrame.from_dict(away_batting_stats, orient='index')
         df.reset_index(inplace=True)
         df.columns = ['Player'] + [col for col in df.columns[1:]]  # Assuming the first column is 'Player'
-        #df = df[df['PA'] >= 20] 
-        return df.to_dict('records'), [{"name": str(i), "id": str(i)} for i in df.columns], {'textAlign': 'left', 'minWidth': '25px', 'width': '25px'}, {'backgroundColor': 'paleturquoise', 'fontWeight': 'bold'}, {'backgroundColor': 'lavender'}, { 'width': '95%', 'overflowY': 'auto', 'margin': 'auto'}
+        return df.to_dict('records'), [{"name": str(i), "id": str(i)} for i in df.columns], {'backgroundColor': 'rgb(50, 50, 50)', 'color': 'white', 'textAlign': 'left', 'minWidth': '25px', 'width': '25px'}, {'backgroundColor': 'rgb(30, 30, 30)', 'fontWeight': 'bold', 'color': 'white'}, {'backgroundColor': 'rgb(50, 50, 50)', 'color': 'white'}, { 'width': '95%', 'overflowY': 'auto', 'margin': 'auto'}
     return [], [], {}, {}, {}, {}
 
 #############Data Storage################
+# Fetch game data
 @app.callback(
     Output('game-data-store', 'data'),
-    [Input('interval-component', 'n_intervals')],
-    [Input('fetch-button', 'n_clicks')],
-    [State('gamepk-dropdown', 'value')]
+    [Input('interval-component', 'n_intervals'),
+     Input('page-load', 'n_intervals'),
+     Input('gamepk-dropdown', 'value')],  # Listen to 'gamepk-dropdown.value'
+    [State('game-data-store', 'data')]
 )
-def fetch_game_data(n_intervals, n_clicks ,game_pk):
-    if n_intervals > 0 or n_clicks > 0:
-        if not game_pk:
-            game_info = fetchBall.get_game_pks_and_teams()
-            if game_info:
-                game_pk = game_info[0][0]  # Set game_pk to the first one in the list
+def fetch_game_data(n_intervals, page_load, game_pk, stored_data):
+    if n_intervals > 0 or page_load == 1 or game_pk:  # Fetch data if the interval component has completed an interval, the page has loaded, or a new gamepk is selected
         game_data = fetchBall.fetch_game_data(game_pk)
         strike_zone_data = fetchBall.fetch_strike_zone_data(game_data) if game_data else None
         return {'game_data': game_data, 'strike_zone_data': strike_zone_data}
-    
-    return {}
+    return stored_data  # Return the stored data if no inputs triggered the callback
+
+@app.callback(
+    [Output('pitcher-dropdown', 'options'),
+     Output('pitcher-dropdown', 'value')],
+    [Input('game-data-store', 'data')],
+    [State('pitcher-dropdown', 'value')]
+)
+def update_pitcher_dropdown(data, current_value):
+    if data:
+        game_data = data['game_data']
+        pitcher_names = dataBall.extract_pitcher_names(game_data)
+        options = [{'label': name, 'value': name} for name in pitcher_names]
+        # If the current value is in the options list, keep it. Otherwise, set the value to the top option
+        value = current_value if current_value in pitcher_names else options[0]['value'] if options else None
+        return options, value
+    return [], None
 
 @app.callback(
     [Output('gamepk-dropdown', 'options'),
      Output('gamepk-dropdown', 'value')],
-    [Input('fetch-button', 'n_clicks')],
+    [Input('interval-component', 'n_intervals'),
+     Input('page-load', 'n_intervals')],  # Add 'page-load' as an input
     [State('gamepk-dropdown', 'value')]
 )
-def update_gamepk_dropdown(n_clicks, current_value):
-    if n_clicks > 0:
+def update_gamepk_dropdown(n_intervals, page_load, current_value):
+    if n_intervals > 0 or page_load == 1:  # Update if the interval component has completed an interval or the page has loaded
         game_info = fetchBall.get_game_pks_and_teams()
         options = [{'label': f"{info[1]} vs {info[2]}", 'value': info[0]} for info in game_info]
-        return options, options[0]['value'] if options and n_clicks == 1 else current_value
+        return options, options[0]['value'] if options and current_value is None else current_value
     return [], None
-
 
 @app.callback(
     Output('stadium-plot', 'figure'),
-    [Input('interval-component', 'n_intervals'),
-     Input('game-data-store', 'data')]
+    [Input('game-data-store', 'data'),
+     Input('gamepk-dropdown', 'value'),
+     Input('interval-component', 'n_intervals')]  # Listen to 'interval-component.n_intervals'
 )
-def update_plot(n, stored_data):
+def update_plot(stored_data, game_pk, n):
     if stored_data and 'game_data' in stored_data:
         runners = runnerBall.get_base_runners(stored_data['game_data'])
-        return stadiumBall.plot_stadium('mariners', runners=runners, title='')
+        defenders = runnerBall.get_defenders(stored_data['game_data'])
+        return stadiumBall.plot_stadium(stored_data['game_data']['home_team_data']['teamName'].lower(), runners=runners,defenders=defenders, title='')
     else:
         return go.Figure()  # Return an empty figure if there's no data
 ##########Pitcher Name Input##############
@@ -224,40 +242,27 @@ def update_pitcher_name_input(selected_pitcher):
 
 
 ############
-@app.callback(
-    [Output('pitcher-dropdown', 'options'),
-     Output('pitcher-dropdown', 'value')],
-    [Input('game-data-store', 'data'),
-     Input('fetch-button', 'n_clicks')],
-    [State('pitcher-dropdown', 'value')]
-)
-def update_pitcher_dropdown(data, n_clicks, current_value):
-    if data:
-        game_data = data['game_data']
-        pitcher_names = dataBall.extract_pitcher_names(game_data)
-        options = [{'label': name, 'value': name} for name in pitcher_names]
-        return options, options[0]['value'] if options and n_clicks == 1 else current_value
-    return [], None
-
 
 
 #############Stat/Event Tables###############
 
 @app.callback(
-    Output('pitcher-table-container', 'children'),
-    Output('batter-table-container', 'children'),
-    Output('recent-events-container', 'children'),
-    Input('game-data-store', 'data'),
-    State('pitcher-name-input', 'value')
+    [Output('pitcher-table-container', 'children'),
+     Output('batter-table-container', 'children'),
+     Output('recent-events-container', 'children')],
+    [Input('game-data-store', 'data'),
+     Input('pitcher-dropdown', 'value')]
 )
-def update_stat_table(stored_data, current_pitcher_name):
+def update_stat_table(stored_data, selected_pitcher_name):
     if stored_data:
         game_data = stored_data['game_data']
         current_play_data = fetchBall.fetch_current_play_data(game_data)
 
-        # Extract batter's and pitcher's full name
+        # Extract batter's full name
         batter_name = current_play_data.get('matchup', {}).get('batter', {}).get('fullName', 'Unknown')
-        pitcher_name = current_play_data.get('matchup', {}).get('pitcher', {}).get('fullName', 'Unknown')
+
+        # Use the selected pitcher's name from the dropdown
+        pitcher_name = selected_pitcher_name
 
         # Fetch and process stats for batter and pitcher
         batter_player_dict, batter_league_average_dict, batter_team_average_dict = dataBall.extract_batter_statline(batter_name)
@@ -269,7 +274,7 @@ def update_stat_table(stored_data, current_pitcher_name):
         # Fetch and sort the pitching events
         all_pitching_events = dataBall.extract_all_game_pitching_events(game_data)
         sorted_events = sorted(all_pitching_events, key=lambda x: x['Pitch #'], reverse=True)
-        recent_events = sorted_events[:4]  # Get the three most recent events
+        recent_events = sorted_events  # Get the three most recent events
 
         # Create tables for batter, pitcher, and recent events
         batter_table = tableBall.create_data_table(batter_player_dict, batter_league_average_dict, batter_team_average_dict, 'batter-slashline-table')
@@ -371,12 +376,43 @@ def update_win_probability_graph(stored_data):
 
             if home_win_probs is not None and away_win_probs is not None:
                 fig = go.Figure()
+                team_colors = {
+    'AZ': '#A71930',  # Arizona Diamondbacks
+    'ATL': '#CE1141',  # Atlanta Braves
+    'BAL': '#DF4601',  # Baltimore Orioles
+    'BOS': '#BD3039',  # Boston Red Sox
+    'CHC': '#0E3386',  # Chicago Cubs
+    'CWS': '#27251F',  # Chicago White Sox
+    'CIN': '#C6011F',  # Cincinnati Reds
+    'CLE': '#E31937',  # Cleveland Guardians (previously Indians)
+    'COL': '#33006F',  # Colorado Rockies
+    'DET': '#0C2340',  # Detroit Tigers
+    'HOU': '#002D62',  # Houston Astros
+    'KCR': '#004687',  # Kansas City Royals
+    'LAA': '#BA0021',  # Los Angeles Angels (more red than blue)
+    'LAD': '#005A9C',  # Los Angeles Dodgers
+    'MIA': '#00A3E0',  # Miami Marlins
+    'MIL': '#FFC52F',  # Milwaukee Brewers (added gold color)
+    'MN': '#002B5C',  # Minnesota Twins
+    'NYM': '#002D72',  # New York Mets
+    'NYY': '#003087',  # New York Yankees
+    'OAK': '#003831',  # Oakland Athletics
+    'PHI': '#E81828',  # Philadelphia Phillies
+    'PIT': '#FDB827',  # Pittsburgh Pirates (added yellow color)
+    'SD': '#2F241D',  # San Diego Padres
+    'SF': '#FD5A1E',  # San Francisco Giants
+    'SEA': '#0C2C56',  # Seattle Mariners
+    'STL': '#C41E3A',  # St. Louis Cardinals
+    'TBR': '#00285D',  # Tampa Bay Rays
+    'TEX': '#003278',  # Texas Rangers
+    'TOR': '#134A8E',  # Toronto Blue Jays
+    'WSH': '#AB0003'   # Washington Nationals
+}
 
-                add_trace(fig, list(range(len(home_win_probs))), home_win_probs, 'lines', home_team, None, 'y1', None, dict(color='blue'))
+                add_trace(fig, list(range(len(home_win_probs))), home_win_probs, 'lines', home_team, None, 'y1', None, dict(color=team_colors.get(home_team, 'black')))
 
-                add_trace(fig, list(range(len(away_win_probs))), away_win_probs, 'lines', away_team, None, 'y1', None, dict(color='red'))
-
-                # Check if previous_result is None
+                add_trace(fig, list(range(len(away_win_probs))), away_win_probs, 'lines', away_team, None, 'y1', None, dict(color=team_colors.get(away_team, 'black')))
+                                # Check if previous_result is None
                 if previous_result is None:
                     previous_result = 'No current at bat'
 
@@ -398,11 +434,11 @@ def update_win_probability_graph(stored_data):
     Output('live-pitch-data-graph', 'figure'),
     [Input('fetch-button', 'n_clicks'),
      Input('interval-component', 'n_intervals'),
-     Input('toggle-labels', 'value')],  # This takes the state of the checkbox
-    [State('gamepk-dropdown', 'value'),
-     State('pitcher-dropdown', 'value')]
+     Input('toggle-labels', 'value'),  # This takes the state of the checkbox
+     Input('pitcher-dropdown', 'value')],  # Listen to 'pitcher-dropdown.value'
+    [State('gamepk-dropdown', 'value')]
 )
-def update_graph_live(button_clicks, n_intervals, toggle_labels, game_id, pitcher_name):
+def update_graph_live(button_clicks, n_intervals, toggle_labels, pitcher_name, game_id):
 
     if not game_id or not pitcher_name:
         return go.Figure()
@@ -432,7 +468,6 @@ def update_graph_live(button_clicks, n_intervals, toggle_labels, game_id, pitche
         fig.update_layout(transition={'duration': 500})
 
     return fig
-
 
 
 #########Callback Functions################
