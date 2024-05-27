@@ -1,6 +1,8 @@
 import json
 import requests
 from requests import session
+import pandas as pd
+import pybaseball
 from pybaseball import get_splits,playerid_lookup
 
 
@@ -33,6 +35,49 @@ def fetch_strike_zone_data(game_data):
     return {'top': 3.5, 'bottom': 1.5}
 
 
+def fetch_combined_team_stats(year, end_year):
+    team_batting_stats = pybaseball.team_batting(year, end_year)
+    print(f"Number of columns in team_batting_stats: {len(team_batting_stats.columns)}")
+
+    team_pitching_stats = pybaseball.team_pitching(year, end_year)
+    print(f"Number of columns in team_pitching_stats: {len(team_pitching_stats.columns)}")
+
+    # Find overlapping columns (excluding 'Team' and 'Season')
+    overlapping_columns = set(team_batting_stats.columns) & set(team_pitching_stats.columns)
+    overlapping_columns -= {'Team', 'Season'}
+
+    # Rename overlapping columns in team_pitching_stats
+    team_pitching_stats = team_pitching_stats.rename(columns={col: f'Pitching {col}' for col in overlapping_columns})
+
+    # Merge the two tables on 'Team' and 'Season'
+    combined_stats = pd.merge(team_batting_stats, team_pitching_stats, on=['Team', 'Season'])
+
+    print(f"Number of columns in combined_stats: {len(combined_stats.columns)}")
+
+    return combined_stats
+def fetch_stats(start_year, end_year=None, data_type='batting', ind=1,qual='y'):
+    """
+    Fetches baseball statistics for the specified year range and data type,
+    with an option to specify the ind parameter for individual or aggregated stats.
+
+    Args:
+        start_year (int): The starting year for fetching stats.
+        end_year (int, optional): The ending year for fetching stats. Defaults to the same as start_year if None.
+        data_type (str, optional): Type of stats to fetch, 'batting' or 'pitching'. Defaults to 'batting'.
+        ind (int, optional): Indicator for individual (1) or aggregated (0) data. Defaults to 1.
+
+    Returns:
+        DataFrame: A DataFrame containing the fetched statistics.
+    """
+    if end_year is None:
+        end_year = start_year
+
+    if data_type == 'batting':
+        player_batting_stats = pybaseball.batting_stats(start_year, end_year, ind=ind,qual=qual)
+        return player_batting_stats
+    elif data_type == 'pitching':
+        player_pitching_stats = pybaseball.pitching_stats(start_year, end_year, ind=ind,qual=qual)
+        return player_pitching_stats
 
 def fetch_game_data(game_pk):
     """Fetches game data from Baseball Savant and exports pitcher data to JSON."""
